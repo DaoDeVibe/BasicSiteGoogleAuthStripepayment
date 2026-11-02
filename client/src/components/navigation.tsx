@@ -24,7 +24,7 @@ export default function Navigation() {
               <div className="flex items-center space-x-3" data-testid="user-profile">
                 {/* User avatar from Google */}
                 <img
-                  src={user.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.email || 'User')}&background=3b82f6&color=ffffff`}
+                  src={user.profileImageUrl || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Crect width='32' height='32' fill='%23e5e7eb'/%3E%3C/svg%3E"}
                   alt="User Avatar"
                   className="w-8 h-8 rounded-full object-cover"
                   data-testid="img-user-avatar"

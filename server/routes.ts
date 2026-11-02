@@ -1,3 +1,5 @@
+import {createHash} from "node:crypto";
+import {publicOrigin} from "./security";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import Stripe from "stripe";
@@ -53,7 +55,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Check if user already has an active subscription
       if (user.stripeSubscriptionId) {
-        const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId,{expand:['latest_invoice.payment_intent']});
         
         if (subscription.status === 'active') {
           return res.json({
@@ -61,12 +63,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             clientSecret: null, // Already has active subscription
           });
         }
+        if(subscription.status==='incomplete'){
+          const invoice=subscription.latest_invoice as any;
+          if(!invoice||typeof invoice==='string'||!invoice.payment_intent?.client_secret)throw Error('Existing checkout is unavailable.');
+          return res.json({subscriptionId:subscription.id,clientSecret:invoice.payment_intent.client_secret});
+        }
+        if(!['canceled','incomplete_expired'].includes(subscription.status))throw Error('Manage the existing subscription in the billing portal.');
       }
 
       if (!user.email) {
         return res.status(400).json({ message: 'User email is required' });
       }
 
+      const namespace=createHash('sha256').update(publicOrigin()).digest('hex').slice(0,24);
+      const scope='basic-authpay:'+namespace+':'+userId;
       let customerId = user.stripeCustomerId;
       
       // Create Stripe customer if doesn't exist
@@ -74,14 +84,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const customer = await stripe.customers.create({
           email: user.email,
           name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-        });
+        },{idempotencyKey:scope+':customer'});
         customerId = customer.id;
       }
 
       // Create product first
       const product = await stripe.products.create({
         name: 'Premium Plan',
-      });
+      },{idempotencyKey:'basic-authpay:'+namespace+':product'});
 
       // Create price for the product
       const price = await stripe.prices.create({
@@ -91,7 +101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           interval: 'month',
         },
         product: product.id,
-      });
+      },{idempotencyKey:'basic-authpay:'+namespace+':price-usd-100-month'});
 
       // Create subscription
       const subscription = await stripe.subscriptions.create({
@@ -104,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           save_default_payment_method: 'on_subscription',
         },
         expand: ['latest_invoice.payment_intent'],
-      });
+      },{idempotencyKey:scope+':subscription:'+(user.stripeSubscriptionId||'initial')});
 
       // Update user with Stripe info
       await storage.updateUserStripeInfo(userId, customerId, subscription.id);
@@ -118,7 +128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Subscription creation error:", error);
-      res.status(400).json({ message: error.message });
+      res.status(400).json({ message: "Unable to start subscription. Please retry." });
     }
   });
 
@@ -170,7 +180,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const session = await stripe.billingPortal.sessions.create({
         customer: user.stripeCustomerId,
-        return_url: `${req.protocol}://${req.get('host')}/`,
+        return_url: publicOrigin()+"/",
       });
 
       res.json({ url: session.url });

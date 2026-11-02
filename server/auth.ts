@@ -1,3 +1,4 @@
+import {publicOrigin} from "./security";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import passport from "passport";
 import session from "express-session";
@@ -10,12 +11,13 @@ if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 export function getSession() {
+  if(!process.env.SESSION_SECRET||process.env.SESSION_SECRET.length<32)throw Error("SESSION_SECRET must contain at least 32 characters.");
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
     conString: process.env.DATABASE_URL,
     createTableIfMissing: false,
-    ttl: sessionTtl,
+    ttl: Math.floor(sessionTtl/1000),
     tableName: "sessions",
   });
   return session({
@@ -25,7 +27,7 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: false, // Set to false for development
+      secure: process.env.NODE_ENV === "production",
       maxAge: sessionTtl,
       sameSite: 'lax'
     },
@@ -42,12 +44,14 @@ export async function setupAuth(app: Express) {
   passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID!,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    callbackURL: "/auth/google/callback"
+    callbackURL: publicOrigin()+"/auth/google/callback",
+    state: true
   },
-  async (accessToken, refreshToken, profile, done) => {
+  async (_accessToken, _refreshToken, profile, done) => {
     try {
-      console.log('🔍 Google OAuth callback received for user:', profile.id);
       
+      const verification=profile._json as {email_verified?:boolean;verified_email?:boolean};
+      if(verification.email_verified!==true&&verification.verified_email!==true)return done(null,false);
       // Upsert user in database
       await storage.upsertUser({
         id: profile.id,
@@ -65,15 +69,12 @@ export async function setupAuth(app: Express) {
           last_name: profile.name?.familyName || '',
           profile_image_url: profile.photos?.[0]?.value || '',
         },
-        access_token: accessToken,
-        refresh_token: refreshToken,
         expires_at: Math.floor(Date.now() / 1000) + 3600 * 24 * 7 // 1 week from now
       };
 
-      console.log('✅ User authenticated successfully:', user.claims.email);
       return done(null, user);
     } catch (error) {
-      console.error('❌ Google OAuth error:', error);
+      console.error('Google authentication failed.');
       return done(error, false);
     }
   }));
@@ -83,12 +84,10 @@ export async function setupAuth(app: Express) {
 
   // Google auth routes  
   app.get('/api/auth/google', (req, res, next) => {
-    console.log('🚀 Starting Google OAuth flow...');
     passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
   });
 
   app.get('/auth/google/callback', (req, res, next) => {
-    console.log('🔄 Google OAuth callback received');
     passport.authenticate('google', { 
       failureRedirect: '/',
       successRedirect: '/'
@@ -97,13 +96,21 @@ export async function setupAuth(app: Express) {
 
   // Login route (redirects to Google)
   app.get("/api/login", (req, res) => {
-    res.redirect('/auth/google');
+    res.redirect('/api/auth/google');
   });
 
   // Logout route
   app.get("/api/logout", (req, res) => {
-    req.logout(() => {
-      res.redirect('/');
+    res.set('Content-Security-Policy',"default-src 'none'; form-action 'self'; frame-ancestors 'none'");
+    res.type('html').send('<!doctype html><title>Sign out</title><form method="post" action="/api/logout"><button>Sign out</button></form>');
+  });
+  app.post('/api/logout',(req,res,next)=>{
+    req.logout(error=>{
+      if(error)return next(error);
+      req.session.destroy(error=>{
+        if(error)return next(error);
+        res.clearCookie('connect.sid',{path:'/'});res.redirect('/');
+      });
     });
   });
 }
@@ -111,15 +118,10 @@ export async function setupAuth(app: Express) {
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
   
-  console.log('🔐 Auth check - isAuthenticated():', req.isAuthenticated());
-  console.log('🔐 Auth check - user exists:', !!user);
-  console.log('🔐 Auth check - user.claims.sub:', user?.claims?.sub);
 
   if (!req.isAuthenticated() || !user?.claims?.sub) {
-    console.log('❌ Authentication failed');
     return res.status(401).json({ message: "Unauthorized" });
   }
 
-  console.log('✅ Authentication successful for user:', user.claims.email);
   return next();
 };
