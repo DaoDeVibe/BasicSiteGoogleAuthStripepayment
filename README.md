@@ -94,3 +94,47 @@ OAuth application, Stripe account, database, and session signing.
 | `VITE_STRIPE_PUBLIC_KEY` | Stripe publishable key included in the frontend build |
 | `PORT` | Optional HTTP listening port; the server defaults to 5000 |
 | `NODE_ENV` | Development or production runtime mode |
+
+## Security maintenance
+
+Use Node.js 22.22.1 or newer. Production requires `PUBLIC_URL` set to the exact
+HTTPS website origin (for example `https://example.com`) and an independently
+random `SESSION_SECRET` of at least 32 characters. Register
+`PUBLIC_URL/auth/google/callback` with your own Google OAuth application.
+
+The maintenance branch upgrades vulnerable locked dependencies, adds OAuth state
+validation and verified Google email checks, uses secure production cookies, keeps
+Google access/refresh tokens out of the application session, and blocks payment
+writes without the exact website Origin. Logout has a confirmation page followed
+by a same-origin POST. Billing return URLs come from configured PUBLIC_URL rather
+than request Host headers. Stripe resource creation uses site/user-scoped retry
+keys; the existing $1/month example remains unchanged. No real prices or charges
+were created during maintenance.
+
+API logs omit response bodies, and error responses omit internal details without
+crashing the server. Unused Replit development plugins/banner and unused vulnerable
+schema-helper dependencies were removed. No store features or DaoDeVibe-specific
+managed services were added: this remains a standalone Google/Stripe template.
+
+Checks: `npm ci --ignore-scripts`, `npm run check`, `npm test`, `npm run build`,
+`npm audit --audit-level=high`. The November 2 maintenance audit reports zero high
+or critical findings; moderate findings remain (primarily development tooling).
+This is not an independent security certification. Build Brain's pinned scanner
+must recheck the imported revision. Real Google callback, Stripe test-card flow,
+subscription cancellation/retry/reconciliation and production deployment still
+need operator acceptance. Future advisories can change the result.
+
+### Protecting the public repository
+
+Public visibility permits reading/cloning/forking, not writing. In GitHub Settings
+→ Rules → Rulesets, create an active branch rule targeting `main`: require pull
+requests, require the `Template security and build` status check after it has run,
+block force pushes and deletion, and keep bypass access narrow. A solo maintainer
+can require PRs without requiring an additional reviewer; add an independent
+approval requirement when another trusted reviewer is available. Review repository
+collaborators/teams, deploy keys and installed GitHub Apps for unnecessary write
+permissions. Protecting main does not revoke an existing app's permissions.
+
+The current integration could not inspect branch protection (GitHub returned403
+for Administration access). These instructions are not evidence that rules were
+installed. Do not disable CI to merge a failed dependency update.
