@@ -21,7 +21,7 @@ Preferred communication style: Simple, everyday language.
 ### Backend Architecture
 - **Runtime**: Node.js with Express.js server
 - **Database ORM**: Drizzle ORM with PostgreSQL dialect
-- **Authentication**: Replit Auth with OpenID Connect (OIDC)
+- **Authentication**: Google OAuth 2.0 through Passport
 - **Session Management**: Express sessions with PostgreSQL session store
 - **Payment Processing**: Stripe integration for subscription management
 - **Build System**: ESBuild for server-side bundling
@@ -50,7 +50,7 @@ Preferred communication style: Simple, everyday language.
 ### Development & Deployment
 - **Development**: Vite dev server with HMR and Express middleware integration
 - **Production Build**: Static asset generation with server bundling
-- **Environment**: Replit-optimized with development banner and error overlays
+- **Environment**: Standard Node.js development and production commands from package.json
 - **TypeScript**: Full TypeScript support across frontend, backend, and shared modules
 
 ## External Dependencies
@@ -64,7 +64,7 @@ Preferred communication style: Simple, everyday language.
 - **Frontend**: React, TanStack Query, Wouter, React Hook Form, shadcn/ui, Tailwind CSS
 - **Backend**: Express.js, Drizzle ORM, Passport.js, connect-pg-simple
 - **Payment**: @stripe/stripe-js, @stripe/react-stripe-js
-- **Development**: Vite, ESBuild, TypeScript, Replit development tools
+- **Development**: Vite, ESBuild, TypeScript
 
 ### UI Components
 - **Component System**: Radix UI primitives with shadcn/ui styling

@@ -112,7 +112,7 @@ keys; the existing $1/month example remains unchanged. No real prices or charges
 were created during maintenance.
 
 API logs omit response bodies, and error responses omit internal details without
-crashing the server. Unused Replit development plugins/banner and unused vulnerable
+crashing the server. Unused development plugins/banner and unused vulnerable
 schema-helper dependencies were removed. No store features or DaoDeVibe-specific
 managed services were added: this remains a standalone Google/Stripe template.
 
